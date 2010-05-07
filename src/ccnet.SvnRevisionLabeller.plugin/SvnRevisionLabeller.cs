@@ -6,6 +6,7 @@ using Exortech.NetReflector;
 using ThoughtWorks.CruiseControl.Core;
 using ThoughtWorks.CruiseControl.Core.Util;
 using ThoughtWorks.CruiseControl.Remote;
+using log4net;
 
 namespace CcNet.Labeller
 {
@@ -42,6 +43,7 @@ namespace CcNet.Labeller
 	[ReflectorType("svnRevisionLabeller")]
 	public class SvnRevisionLabeller : ILabeller
 	{
+                private static readonly log4net.ILog _Log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 		private const string MajorToken = "{major}";
 		private const string MinorToken = "{minor}";
 		private const string BuildToken = "{build}";
@@ -225,6 +227,8 @@ namespace CcNet.Labeller
 			if (revision == lastVersion.Revision)
 			{
 				_rebuild++;
+			} else {
+				_rebuild = 0;
 			}
 
 			// Replace the tokens in the pattern with the appropriate string formatting placeholders
@@ -234,7 +238,9 @@ namespace CcNet.Labeller
 				.Replace(RevisionToken, "{3}")
 				.Replace(RebuildToken, "{4}");
 
-			return String.Format(format, Major, Minor, build, revision, _rebuild);
+			var ret = String.Format(format, Major, Minor, build, revision, _rebuild);
+			_Log.InfoFormat("Generated new build label '{0}' (PreviousVersion: {1}), Rebuild: {2}", ret, lastVersion, _rebuild);
+			return ret;
 		}
 
 		/// <summary>
@@ -379,10 +385,10 @@ namespace CcNet.Labeller
 					Regex regex = new Regex(pattern);
 					Match match = regex.Match(label);
 
-					int major = Convert.ToInt32(match.Groups["major"].Value);
-					int minor = Convert.ToInt32(match.Groups["minor"].Value);
-					int build = Convert.ToInt32(match.Groups["build"].Value);
-					int rev = Convert.ToInt32(match.Groups["revision"].Value);
+					int major = match.Groups["major"].Success ? Convert.ToInt32(match.Groups["major"].Value) : 0;
+					int minor = match.Groups["minor"].Success ? Convert.ToInt32(match.Groups["minor"].Value) : 0;
+					int build = match.Groups["build"].Success ? Convert.ToInt32(match.Groups["build"].Value) : 0;
+					int rev = match.Groups["revision"].Success ? Convert.ToInt32(match.Groups["revision"].Value) : 0;
 
 					// special case for "forced"
 					Int32.TryParse(match.Groups["rebuild"].Value, out _rebuild);
@@ -393,8 +399,10 @@ namespace CcNet.Labeller
 
 				return version;
 			}
-			catch (SystemException)
+			catch (Exception ex)
 			{
+				_Log.Error("Error parsing previous label", ex);
+				
 				// uh oh! fake it out
 				return new Version(Major, Minor, 0, revision);
 			}
